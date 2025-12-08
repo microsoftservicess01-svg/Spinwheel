@@ -1,115 +1,111 @@
-// public/app.js
 let token = null;
-const api = (path, opts={}) => fetch('/api'+path, Object.assign({headers: token?{Authorization:'Bearer '+token}:{}, credentials:'same-origin'}, opts)).then(r=>r.json());
+const api = (path, opts={}) =>
+  fetch('/api'+path, {
+    ...opts,
+    headers: token ? { ...opts.headers, Authorization: 'Bearer '+token } : opts.headers,
+  }).then(r=>r.json());
 
-async function fetchClientId(){
-  // A small endpoint isn't present: just read from environment via rendering: we will rely on the current page to fetch it by asking /env (we didn't create it).
-  // Instead we will require the GOOGLE_CLIENT_ID to be set as a meta tag by server; but simpler: ask user to set it in a JS variable below.
-  return window.__GOOGLE_CLIENT_ID || '';
-}
+// Registration
+document.getElementById('registerBtn').onclick = async ()=>{
+  const password = document.getElementById('regPassword').value;
+  document.getElementById('reg-msg').innerText = 'Registering...';
 
-// Render the Google button
-async function initGoogle(){
-  const CLIENT_ID = await fetchClientId();
-  if(!CLIENT_ID){
-    document.getElementById('auth-msg').innerText = 'Google Client ID not configured on server. Set GOOGLE_CLIENT_ID env var.';
-    return;
-  }
-
-  window.google.accounts.id.initialize({
-    client_id: CLIENT_ID,
-    callback: handleCredentialResponse
+  const res = await api('/register',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({password})
   });
-  window.google.accounts.id.renderButton(
-    document.getElementById('googleBtn'),
-    { theme: 'outline', size: 'large' } // customization
-  );
-}
-
-async function handleCredentialResponse(response){
-  // response.credential is the ID token
-  const id_token = response.credential;
-  const res = await fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_token})});
-  const j = await res.json();
-  if (j.token) {
-    token = j.token;
-    afterLogin(j.email);
+  
+  if(res.token){
+    token = res.token;
+    document.getElementById('reg-msg').innerText = 
+      'Registered! Your Unique ID: ' + res.unique_id;
+    afterLogin(res.unique_id);
   } else {
-    document.getElementById('auth-msg').innerText = j.error || 'Auth failed';
+    document.getElementById('reg-msg').innerText = res.error;
   }
-}
+};
 
-document.addEventListener('DOMContentLoaded', async ()=>{
-  // try to fetch GOOGLE_CLIENT_ID from server-injected window variable
-  // If you want, server can inject it by templating index.html; for now put it manually:
-  // e.g. in browser console: window.__GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
-  await initGoogle();
-});
+// Login
+document.getElementById('loginBtn').onclick = async ()=>{
+  const unique_id = document.getElementById('loginUniqueId').value;
+  const password = document.getElementById('loginPassword').value;
 
-// called after successful login
-async function afterLogin(email){
+  const res = await api('/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({unique_id,password})
+  });
+  
+  if(res.token){
+    token = res.token;
+    afterLogin(res.unique_id);
+  } else {
+    document.getElementById('login-msg').innerText = res.error;
+  }
+};
+
+function afterLogin(uid){
   document.getElementById('auth').style.display='none';
   document.getElementById('main').style.display='block';
-  document.getElementById('welcome').innerText = 'Welcome, ' + email;
+  document.getElementById('welcome').innerText = 'Welcome, ' + uid;
   loadWinner();
 }
 
-// load today's winner
 async function loadWinner(){
   const j = await api('/winner/latest');
-  if(j.winner){
-    const w = j.winner;
-    document.getElementById('today-winner').innerText = w.winner_email ? `${w.winner_email} (date: ${w.winner_date})` : 'No winner yet';
-  } else document.getElementById('today-winner').innerText = 'No winner yet';
+  document.getElementById('today-winner').innerText =
+    j?.winner?.winner_unique_id 
+      ? `${j.winner.winner_unique_id} (date: ${j.winner.winner_date})`
+      : "No winner yet";
 }
 
-/* SPINNING ANIMATION */
-const spinBtn = document.getElementById('spinBtn');
+/* SPIN ANIMATION */
+
 const wheel = document.getElementById('wheel');
-const SECTORS = 8; // must match backend sectors length
-
-function sectorToAngle(index){
-  // sectors laid out clockwise; we want the wheel to stop so that the chosen sector lands at top-pointer
-  const sectorSize = 360 / SECTORS;
-  // compute random offset inside sector to make it look natural
-  const offset = Math.random() * (sectorSize - 6) - (sectorSize/2 - 3);
-  const target = 360 - (index * sectorSize + sectorSize/2) + offset;
-  return target;
-}
+const spinBtn = document.getElementById('spinBtn');
+const SECTORS = 8;
 
 let currentRotation = 0;
 
+function sectorToAngle(index){
+  const size = 360 / SECTORS;
+  const rand = (Math.random()*14)-7;
+  return 360 - (index * size + size/2) + rand;
+}
+
 spinBtn.onclick = async ()=>{
-  spinBtn.disabled = true;
-  document.getElementById('spin-result').innerText = 'Spinning...';
+  spinBtn.disabled=true;
+  document.getElementById('spin-result').innerText="Spinning...";
+
   const res = await api('/spin',{method:'POST'});
   if(res.error){
     document.getElementById('spin-result').innerText = res.error;
-    spinBtn.disabled = false;
+    spinBtn.disabled=false;
     return;
   }
-  const idx = (typeof res.sectorIndex === 'number') ? res.sectorIndex : (res.result === 'GIFT' ? 7 : 0);
-  const spinCount = 6 + Math.floor(Math.random()*4); // full rotations
-  const targetAngle = spinCount*360 + sectorToAngle(idx);
 
-  // animate with CSS transition
+  const idx = res.sectorIndex;
+  const fullTurns = 6 + Math.floor(Math.random()*4);
+  const target = fullTurns*360 + sectorToAngle(idx);
+
   currentRotation = currentRotation % 360;
-  const finalRotation = currentRotation + targetAngle;
-  wheel.style.transition = 'transform 4s cubic-bezier(.2,.9,.2,1)';
-  wheel.style.transform = `rotate(${finalRotation}deg)`;
+  const final = currentRotation + target;
 
-  // when transition ends show result
-  wheel.addEventListener('transitionend', function handler(){
-    wheel.style.transition = ''; // clear for future spins
-    currentRotation = finalRotation % 360;
-    wheel.removeEventListener('transitionend', handler);
-    const r = res.result;
-    if(r === 'GIFT'){
-      document.getElementById('spin-result').innerText = '🎉 You landed on: Chance to win Free Gift coupon! If selected you may win ₹250.';
-    } else {
-      document.getElementById('spin-result').innerText = 'Try Again!';
-    }
+  wheel.style.transition = "transform 4s cubic-bezier(.2,.9,.2,1)";
+  wheel.style.transform = `rotate(${final}deg)`;
+
+  wheel.addEventListener("transitionend", function handler(){
+    wheel.removeEventListener("transitionend", handler);
+    wheel.style.transition = "";
+    currentRotation = final % 360;
+
+    document.getElementById('spin-result').innerText =
+      res.result === "GIFT"
+        ? "🎉 You landed on the gift coupon chance!"
+        : "Try Again!";
+
     loadWinner();
-    spinBtn.disabled = false;
+    spinBtn.disabled=false;
   });
 };
