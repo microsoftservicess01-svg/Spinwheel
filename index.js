@@ -1,12 +1,13 @@
+// index.js (Google-only auth + sectorIndex returned for spinning)
 const express = require('express');
 const bodyParser = require('body-parser');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const cors = require('cors');
+const fetch = global.fetch || require('node-fetch');
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const DB_FILE = process.env.DATABASE_FILE || path.join(__dirname, 'data', 'app.db');
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''; // set in Render
 
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
@@ -22,6 +24,7 @@ const db = new sqlite3.Database(DB_FILE);
 const initSql = fs.readFileSync(path.join(__dirname, 'db', 'init.sql'), 'utf8');
 db.exec(initSql, (err) => { if (err) console.error('DB init error', err); });
 
+// sqlite helpers
 function run(db, sql, params=[]) {
   return new Promise((res, rej) => db.run(sql, params, function(err){ if(err) rej(err); else res(this); }));
 }
@@ -42,39 +45,43 @@ function authMiddleware(req, res, next) {
   } catch (e) { return res.status(401).json({ error: 'Invalid token' }); }
 }
 
-app.post('/api/register', async (req,res)=>{
-  const { email, password } = req.body;
-  if(!email || !password) return res.status(400).json({ error: 'email & password required' });
-  try{
-    const hash = await bcrypt.hash(password, 10);
-    const result = await run(db, 'INSERT INTO users (email, password_hash) VALUES (?,?)', [email, hash]);
-    const id = result.lastID;
-    const token = jwt.sign({ id, email }, JWT_SECRET);
-    res.json({ token });
-  }catch(e){
-    console.error(e);
-    res.status(400).json({ error: 'Email already exists or invalid' });
+// Google auth endpoint: frontend sends id_token
+app.post('/api/auth/google', async (req, res) => {
+  const { id_token } = req.body;
+  if (!id_token) return res.status(400).json({ error: 'id_token required' });
+  try {
+    // Verify token with Google tokeninfo
+    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(id_token)}`);
+    const t = await r.json();
+    if (t.aud !== GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID) {
+      return res.status(400).json({ error: 'Invalid audience' });
+    }
+    // t contains email, name, picture etc.
+    const email = t.email;
+    if (!email) return res.status(400).json({ error: 'Email not found in token' });
+
+    // find or create user
+    let user = await get(db, 'SELECT * FROM users WHERE email = ?', [email]);
+    if (!user) {
+      const result = await run(db, 'INSERT INTO users (email, password_hash) VALUES (?,?)', [email, 'google']);
+      const id = result.lastID;
+      user = await get(db, 'SELECT * FROM users WHERE id = ?', [id]);
+    }
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET);
+    res.json({ token, email: user.email });
+  } catch (e) {
+    console.error('Google auth error', e);
+    res.status(500).json({ error: 'Auth error' });
   }
 });
 
-app.post('/api/login', async (req,res)=>{
-  const { email, password } = req.body;
-  if(!email || !password) return res.status(400).json({ error: 'email & password required' });
-  try{
-    const row = await get(db, 'SELECT * FROM users WHERE email = ?', [email]);
-    if(!row) return res.status(400).json({ error: 'Invalid credentials' });
-    const ok = await bcrypt.compare(password, row.password_hash);
-    if(!ok) return res.status(400).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: row.id, email: row.email }, JWT_SECRET);
-    res.json({ token });
-  }catch(e){ res.status(500).json({ error: 'Server error' }); }
-});
-
+// get user info
 app.get('/api/me', authMiddleware, async (req,res)=>{
   const user = await get(db, 'SELECT id,email,last_spin_at FROM users WHERE id = ?', [req.user.id]);
   res.json({ user });
 });
 
+// Spin endpoint: returns result AND sectorIndex (0..7)
 app.post('/api/spin', authMiddleware, async (req,res)=>{
   try{
     const user = await get(db, 'SELECT * FROM users WHERE id = ?', [req.user.id]);
@@ -87,19 +94,28 @@ app.post('/api/spin', authMiddleware, async (req,res)=>{
         return res.status(429).json({ error: `You can spin again after ${hoursLeft} hour(s).` });
       }
     }
+
+    // sectors array; increase size or change distribution if needed.
+    // We'll return index so frontend can animate to that sector.
     const sectors = [ 'TRY','TRY','TRY','TRY','TRY','TRY','TRY','GIFT' ];
-    const choice = sectors[Math.floor(Math.random()*sectors.length)];
+    const sectorIndex = Math.floor(Math.random()*sectors.length);
+    const choice = sectors[sectorIndex];
+
     await run(db, 'INSERT INTO spins (user_id,result) VALUES (?,?)', [user.id, choice]);
     await run(db, 'UPDATE users SET last_spin_at = ? WHERE id = ?', [Math.floor(Date.now()/1000), user.id]);
+
     if(choice === 'GIFT'){
       const today = new Date().toISOString().slice(0,10);
       const exists = await get(db, 'SELECT * FROM gift_claims WHERE user_id = ? AND claim_date = ?', [user.id, today]);
       if(!exists) await run(db, 'INSERT INTO gift_claims (user_id, claim_date) VALUES (?,?)', [user.id, today]);
     }
-    res.json({ result: choice });
+
+    // return both result and index
+    res.json({ result: choice, sectorIndex });
   }catch(e){ console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
+// ... keep other endpoints (gift-claimants, winner/latest, admin/pick-winner, cron) unchanged ...
 app.get('/api/gift-claimants', authMiddleware, async (req,res)=>{
   try{
     const today = new Date().toISOString().slice(0,10);
@@ -131,6 +147,7 @@ app.post('/api/admin/pick-winner', async (req,res)=>{
   }catch(e){ console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
+// cron unchanged
 cron.schedule('5 0 * * *', async () => {
   try{
     const today = new Date().toISOString().slice(0,10);
@@ -146,3 +163,4 @@ cron.schedule('5 0 * * *', async () => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=>console.log('Server running on port', PORT));
+
