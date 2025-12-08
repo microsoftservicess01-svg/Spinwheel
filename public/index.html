@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lucky Spin Wheel</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Lucky Spin Wheel</h1>
+
+    <div id="main" class="card">
+      <p id="clientInfo" class="muted"></p>
+
+      <div class="wheel-wrap">
+        <div id="wheel" class="wheel"></div>
+        <button id="spinBtn">Spin</button>
+      </div>
+
+      <p id="spin-result"></p>
+
+      <h4>Today's winner</h4>
+      <div id="today-winner">Loading...</div>
+
+      <div style="margin-top:16px;">
+        <button id="quizBtn" onclick="window.location='/quiz.html'">Daily Quiz (Answer & Qualify)</button>
+      </div>
+    </div>
+  </div>
+
+<script src="/app.js"></script>
+</body>
+</html>
