@@ -13,12 +13,20 @@
     <div id="main" class="card">
       <p id="clientInfo" class="muted"></p>
 
-      <div class="wheel-wrap">
+      <div class="wheel-wrap" style="position:relative; height:320px;">
         <div id="wheel" class="wheel"></div>
-        <button id="spinBtn">Spin</button>
+
+        <!-- labels placed around wheel -->
+        <div id="sector-labels"></div>
+
+        <div style="position:absolute; right:26%; top:120px;">
+          <button id="spinBtn">Spin</button>
+        </div>
       </div>
 
       <p id="spin-result"></p>
+
+      <div id="lucky-action" style="margin-top:8px"></div>
 
       <h4>Today's winner</h4>
       <div id="today-winner">Loading...</div>
