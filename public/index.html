@@ -5,30 +5,43 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Lucky Spin Wheel</title>
   <link rel="stylesheet" href="/style.css">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="container">
     <h1>Lucky Spin Wheel</h1>
 
     <div id="auth" class="card">
-      <h3>Sign in with Google</h3>
-      <div id="g_id_onload"
-           data-client_id=""
-           data-login_uri=""
-           data-auto_prompt="false">
+      <h3>Register / Login</h3>
+
+      <div id="registerBox">
+        <h4>Register (System creates your Unique ID)</h4>
+        <input id="regPassword" type="password" placeholder="Password" />
+        <button id="registerBtn">Register</button>
+        <p id="reg-msg" class="muted"></p>
       </div>
-      <div id="googleBtn"></div>
-      <p id="auth-msg" class="muted"></p>
+
+      <hr/>
+
+      <div id="loginBox">
+        <h4>Login</h4>
+        <input id="loginUniqueId" placeholder="LW123456" />
+        <input id="loginPassword" type="password" placeholder="Password" />
+        <button id="loginBtn">Login</button>
+        <p id="login-msg" class="muted"></p>
+      </div>
+
     </div>
 
     <div id="main" style="display:none">
       <p id="welcome"></p>
+
       <div class="wheel-wrap">
         <div id="wheel" class="wheel"></div>
         <button id="spinBtn">Spin</button>
       </div>
+
       <p id="spin-result"></p>
+
       <h4>Today's winner</h4>
       <div id="today-winner">Loading...</div>
     </div>
