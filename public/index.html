@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lucky Spin Wheel</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Lucky Spin Wheel</h1>
+
+    <div id="auth" class="card">
+      <h3>Register / Login</h3>
+      <input id="email" placeholder="email" />
+      <input id="password" type="password" placeholder="password" />
+      <div style="margin-top:8px">
+        <button id="register">Register</button>
+        <button id="login">Login</button>
+      </div>
+      <p id="auth-msg" class="muted"></p>
+    </div>
+
+    <div id="main" style="display:none">
+      <p id="welcome"></p>
+      <div class="wheel-wrap">
+        <div id="wheel" class="wheel"></div>
+        <button id="spinBtn">Spin</button>
+      </div>
+      <p id="spin-result"></p>
+      <h4>Today's winner</h4>
+      <div id="today-winner">Loading...</div>
+    </div>
+  </div>
+<script src="/app.js"></script>
+</body>
+</html>
