@@ -11,14 +11,25 @@
     <h1>Daily Quiz</h1>
     <div class="card">
       <p class="muted">One attempt per day. Answer correctly to qualify for ₹200 daily draw.</p>
+
       <div id="quizWrap">
         <div id="questionArea">Loading questions...</div>
       </div>
+
       <div style="margin-top:12px;">
         <button onclick="window.location='/'">Back</button>
       </div>
     </div>
   </div>
-<script src="/quiz.js"></script>
+
+  <!-- Load quiz script -->
+  <script src="/quiz.js"></script>
+
+  <!-- Listener to confirm that dispatch event is available -->
+  <script>
+    document.addEventListener("correctAnswer", () => {
+      console.log("✔ correctAnswer event received by quiz.html");
+    });
+  </script>
 </body>
 </html>
